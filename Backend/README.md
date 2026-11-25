@@ -30,7 +30,7 @@ Set these in `Backend/.env` for local development and in the hosting provider's 
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud. |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret; keep private. |
 | `GOOGLE_REDIRECT_URI` | Exact backend callback URL registered in Google Cloud. |
-| `FRONTEND_URL` | Frontend origin used after a successful callback, for example `http://localhost:5173` locally. |
+| `FRONTEND_URL` | Frontend origin allowed by CORS and used after a successful callback, for example `http://localhost:5173` locally. |
 | `JWT_SECRET` | Signs and verifies the short-lived OAuth `state` value. |
 | `ENCRYPTION_KEY` | 64 hexadecimal characters used to encrypt Google tokens stored in MongoDB. Keep it stable; changing it makes previously stored tokens undecryptable. |
 

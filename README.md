@@ -69,7 +69,7 @@ Configure the provider variables for the integrations you plan to use:
 | Variables | Used for |
 | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google OAuth; add the callback URI to the Google OAuth client. |
-| `FRONTEND_URL` | Where the backend redirects after an integration callback. |
+| `FRONTEND_URL` | Frontend origin allowed by backend CORS and used after an integration callback. |
 | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | Gemini-powered image analysis and captioning. |
 | `TAVILY_API_KEY` | Web search; optional. |
 | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_REDIRECT_URI` | Instagram connection and publishing. |

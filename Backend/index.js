@@ -14,18 +14,22 @@ import paymentRouter from "./routes/payment.route.js";
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Allowed frontend origins
-const allowedOrigins = [
+const frontendOrigin = process.env.FRONTEND_URL
+  ? new URL(process.env.FRONTEND_URL).origin
+  : null;
+
+const allowedOrigins = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://zyroai-2.onrender.com",
-];
+  frontendOrigin,
+].filter(Boolean));
 
 // CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests without origin (server-to-server, health checks)
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.has(origin)) {
       return callback(null, true);
     }
 
