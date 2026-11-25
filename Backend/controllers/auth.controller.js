@@ -3,6 +3,18 @@ import { getAuth } from "firebase-admin/auth";
 import { app } from "../config/firebase.js";
 import User from "../models/user.model.js";
 
+const getAuthCookieOptions = () => {
+  const secure = process.env.FRONTEND_URL
+    ? new URL(process.env.FRONTEND_URL).protocol === "https:"
+    : false;
+
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: secure ? "none" : "lax",
+  };
+};
+
 export const login = async (req, res) => {
   try {
     const { token: firebaseToken } = req.body;
@@ -39,9 +51,7 @@ export const login = async (req, res) => {
     );
 
     res.cookie("token", token, {
-      httpOnly: "true",
-      secure: false,
-      sameSite: "strict",
+      ...getAuthCookieOptions(),
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -53,7 +63,7 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    res.clearCookie("token");
+    res.clearCookie("token", getAuthCookieOptions());
     return res.status(200).json({ message: "logout successfully" });
   } catch (error) {
     return res.status(500).json({ message: `logout error ${error}` });

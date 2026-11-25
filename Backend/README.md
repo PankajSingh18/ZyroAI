@@ -43,7 +43,7 @@ Never commit `.env`, OAuth client secrets, or token values. `index.js` loads dot
 3. The user grants consent on Google's page. Google redirects to `GET /api/integration/google/callback` with an authorization code and the state.
 4. The backend validates the state, exchanges the code, identifies the Google account, encrypts and stores the tokens, then redirects to `${FRONTEND_URL}/integration?google=connected`.
 
-The callback route is public because Google redirects the browser to it; the signed, expiring state binds the callback to the initiating user. The connect and disconnect routes require the user's authenticated cookie.
+The callback route is public because Google redirects the browser to it; the signed, expiring state binds the callback to the initiating user. The connect and disconnect routes require the user's authenticated cookie. When `FRONTEND_URL` uses HTTPS, the login cookie is configured as `SameSite=None; Secure` for cross-origin frontend/API requests; local HTTP uses `SameSite=Lax`.
 
 ### Requested scopes
 
