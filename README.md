@@ -1,213 +1,147 @@
-# ZyroAI Backend: API and Integrations
+# ZyroAI
 
-This guide covers backend setup for Firebase and Google OAuth, plus the authenticated chat, agent, image, and action-approval endpoints.
+ZyroAI is an AI automation workspace for chatting with AI, creating tool-enabled agents, connecting external services, and managing usage credits.
 
-## Firebase Admin credentials
+## What it includes
 
-The backend uses Firebase Admin to verify sign-in tokens. For deployment (including Render), add a `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable containing the complete service-account JSON. Keep it in the hosting provider's secret environment settings; do not commit it or paste it into source files.
+- **AI chat** with conversation history and image analysis/captioning.
+- **Custom agents** with per-agent instructions, knowledge bases, and optional tools.
+- **Connected services** for Google Gmail/Calendar and Instagram.
+- **Credits and plans** with Razorpay checkout.
+- **Authentication** using Firebase on the client and a protected Express API.
 
-For local development, the backend also accepts `Backend/serviceAccountKey.json`. This file is ignored by Git and should remain private. If both credential sources are present, `FIREBASE_SERVICE_ACCOUNT_JSON` takes precedence.
+## Tech stack
 
-## Google OAuth
-
-The Google OAuth client is configured in `config/googleOAuth.js` and is used by the integration routes to connect a user's Google account for Gmail and Google Calendar features.
-
-### Google Cloud setup
-
-1. In Google Cloud Console, select the project and create an OAuth 2.0 Client ID for a **Web application**.
-2. Enable the **Gmail API** and **Google Calendar API** for that project.
-3. Add the backend callback URL to the OAuth client's **Authorized redirect URIs**. It must exactly match `GOOGLE_REDIRECT_URI`:
-   - Local: `http://localhost:8000/api/integration/google/callback`
-   - Production: `https://<your-backend-domain>/api/integration/google/callback`
-4. Configure the OAuth consent screen. During testing, add the Google accounts that need access as test users. Google may require app verification before general use of Gmail scopes.
-
-### Environment variables
-
-Set these in `Backend/.env` for local development and in the hosting provider's secret environment settings for deployment:
-
-| Variable | Purpose |
+| Area | Technologies |
 | --- | --- |
-| `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud. |
-| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret; keep private. |
-| `GOOGLE_REDIRECT_URI` | Exact backend callback URL registered in Google Cloud. |
-| `FRONTEND_URL` | Frontend origin used after a successful callback, for example `http://localhost:5173` locally. |
-| `JWT_SECRET` | Signs and verifies the short-lived OAuth `state` value. |
-| `ENCRYPTION_KEY` | 64 hexadecimal characters used to encrypt Google tokens stored in MongoDB. Keep it stable; changing it makes previously stored tokens undecryptable. |
+| Frontend | React, Vite, Tailwind CSS, Redux Toolkit |
+| Backend | Node.js, Express, MongoDB, Mongoose |
+| AI and tools | LangChain, LangGraph, Groq, Gemini, Model Context Protocol (MCP) |
+| Integrations | Firebase Authentication, Google APIs, Instagram Graph API, Razorpay |
 
-Never commit `.env`, OAuth client secrets, or token values. `index.js` loads dotenv before the application modules so the OAuth client is initialized with the configured environment values.
+## Repository layout
 
-### OAuth flow
+```text
+.
+├── Backend/
+│   ├── config/          # Database, OAuth, Firebase, and payment configuration
+│   ├── controllers/     # API handlers
+│   ├── mcp/             # MCP server and tool integrations
+│   ├── models/          # MongoDB models
+│   ├── routes/          # Express API routes
+│   ├── utils/           # Chat graphs, agent tools, and credit helpers
+│   └── README.md        # Backend API, Firebase, and Google OAuth guide
+└── Frontend/
+    └── src/
+        ├── Pages/       # Login, workspace, agents, integrations, and pricing
+        ├── features/    # API calls
+        └── redux/       # Application state
+```
 
-1. An authenticated frontend requests `GET /api/integration/google` (or `GET /api/integration/google/connect`).
-2. The backend returns an authorization URL with the configured scopes, offline access, and a signed `state` value that expires after 10 minutes.
-3. The user grants consent on Google's page. Google redirects to `GET /api/integration/google/callback` with an authorization code and the state.
-4. The backend validates the state, exchanges the code, identifies the Google account, encrypts and stores the tokens, then redirects to `${FRONTEND_URL}/integration?google=connected`.
+## Requirements
 
-The callback route is public because Google redirects the browser to it; the signed, expiring state binds the callback to the initiating user. The connect and disconnect routes require the user's authenticated cookie.
+- Node.js 22.12 or newer
+- npm
+- A MongoDB database
+- Firebase project credentials
 
-### Requested scopes
+Google OAuth, AI image analysis, web search, Instagram, and Razorpay each need their corresponding provider credentials. You can run the app without optional integrations, but the features that depend on them will be unavailable.
 
-| Scope | Access |
+## Run locally
+
+### 1. Configure the backend
+
+Create `Backend/.env`. At minimum, configure:
+
+```dotenv
+PORT=8000
+MONGO_URI=<your MongoDB connection string>
+JWT_SECRET=<a long random secret>
+MCP_AUTH_SECRET=<a separate long random secret>
+GROQ_API_KEY=<your Groq API key>
+ENCRYPTION_KEY=<64 hexadecimal characters>
+```
+
+Firebase Admin credentials are also needed for authentication. For local development, place the Firebase service-account JSON at `Backend/serviceAccountKey.json`; it is ignored by Git. For deployment, use the `FIREBASE_SERVICE_ACCOUNT_JSON` secret environment variable with the complete JSON value instead.
+
+Configure the provider variables for the integrations you plan to use:
+
+| Variables | Used for |
 | --- | --- |
-| `openid`, `email`, `profile` | Identify the connected Google account. |
-| `https://www.googleapis.com/auth/calendar.events` | Create and manage calendar events. |
-| `https://www.googleapis.com/auth/gmail.send` | Send email through Gmail. |
-| `https://www.googleapis.com/auth/gmail.readonly` | Search and read Gmail messages. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google OAuth; add the callback URI to the Google OAuth client. |
+| `FRONTEND_URL` | Where the backend redirects after an integration callback. |
+| `GOOGLE_API_KEY` or `GEMINI_API_KEY` | Gemini-powered image analysis and captioning. |
+| `TAVILY_API_KEY` | Web search; optional. |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_REDIRECT_URI` | Instagram connection and publishing. |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Payment checkout and verification. |
 
-The user must grant the required scopes for the corresponding Gmail or Calendar integration to work.
+The Google callback URL for local development is:
 
-## Authentication
-
-Every endpoint requires the signed-in user's `token` cookie. The backend reads the cookie to authenticate the request; include cookies when calling the API from a browser:
-
-```js
-fetch(`${API_URL}/api/chat`, {
-  method: "POST",
-  credentials: "include",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: "Hello" }),
-});
+```text
+http://localhost:8000/api/integration/google/callback
 ```
 
-Requests and responses use JSON unless noted otherwise.
+Install dependencies and start the API:
 
-## Endpoints
-
-### `POST /api/chat`
-
-Send a message to the standard chat assistant.
-
-**Request body**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `message` | string | Yes | Must contain non-whitespace text. |
-| `threadId` | string | No | Reuse to continue a conversation. Defaults to the signed-in user's ID. |
-
-**Success (`200`)**
-
-```json
-{
-  "content": "Hello! How can I help?",
-  "threadId": "conversation-id"
-}
+```bash
+cd Backend
+npm install
+npm run dev
 ```
 
-### `POST /api/chat/agent`
+The backend defaults to port `5000`; the example above uses `8000` to match the frontend API default.
 
-Send a message to one of the signed-in user's agents. The agent must be supplied as an object with `_id` or `name`, or as a name string.
+### 2. Configure and run the frontend
 
-**Request body**
+Create `Frontend/.env` with:
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `message` | string | Yes | Must contain non-whitespace text. |
-| `agent` | object or string | Yes | Agent object with `_id`/`name`, or the agent's name. |
-| `threadId` | UUID string | No | Reuse the ID to continue the agent conversation. A UUID is generated if omitted. |
-
-**Success (`200`) — regular response**
-
-```json
-{
-  "aiResponse": "Here is the answer.",
-  "interrupted": false,
-  "interrupts": [],
-  "agentId": "agent-database-id",
-  "threadId": "conversation-uuid"
-}
+```dotenv
+VITE_SERVER_URL=http://localhost:8000
+VITE_FIREBASE_API_KEY=<your Firebase web API key>
+VITE_CLOUDINARY_CLOUD_NAME=<your Cloudinary cloud name>
+VITE_CLOUDINARY_PRESET=<your unsigned upload preset>
 ```
 
-An action requiring approval returns an `approvalRequest` alongside `aiResponse`, `agentId`, and `threadId`. Pass the request's `agentId`, `threadId`, and `approvalId` to the approval endpoint.
+Install dependencies and start Vite:
 
-### `POST /api/chat/agent/approval`
-
-Approve or reject a pending agent action, such as sending an email, creating a calendar event, or publishing an Instagram post.
-
-**Request body**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `agentId` | string | Yes | MongoDB ID of the user's agent. |
-| `threadId` | UUID string | Yes | Conversation containing the pending action. |
-| `approvalId` | string | Yes | ID from the pending approval request; maximum 256 characters. |
-| `approved` | boolean | Yes | `true` to approve, `false` to reject. |
-
-**Success (`200`)**
-
-```json
-{
-  "aiResponse": "Action completed.",
-  "decision": "approved",
-  "interrupted": false,
-  "interrupts": [],
-  "agentId": "agent-database-id"
-}
+```bash
+cd Frontend
+npm install
+npm run dev
 ```
 
-If another action requires approval, the response also includes its `approvalRequest`. Each approval request can be used only once.
+Open the local URL printed by Vite (typically `http://localhost:5173`).
 
-### `POST /api/chat/analyze-image`
+## API overview
 
-Analyze an uploaded image using the image-analysis MCP tool.
+The backend mounts these API groups:
 
-**Request body**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `imageUrl` | string | Yes | URL of the uploaded image. |
-| `prompt` | string | No | Optional instruction, up to 2,200 characters. Defaults to a general image description. |
-
-**Success (`200`)**
-
-```json
-{
-  "analysis": "The image shows..."
-}
-```
-
-### `POST /api/chat/caption`
-
-Generate a caption for a base64-encoded JPEG, PNG, or WebP image.
-
-**Request body**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `imageDataUrl` | string | Yes | Image data URL, such as `data:image/png;base64,...`; maximum image size is 5 MB. |
-
-**Success (`200`)**
-
-```json
-{
-  "caption": "A concise description of the image."
-}
-```
-
-## Credit usage
-
-Credits are deducted after the corresponding operation succeeds:
-
-| Operation | Credits |
-| --- | ---: |
-| Standard chat message | 2 |
-| Agent chat message | 2 |
-| Image analysis | 2 |
-| Image caption generation | 2 |
-| Approved agent action | 10 |
-| Rejected agent action | 0 for the approval decision |
-
-An agent message that creates an approval request incurs the agent-chat cost. Approving that action incurs the additional approval cost.
-
-## Errors
-
-Errors use a JSON response with a `message` field. Common status codes include:
-
-| Status | Meaning |
+| Base path | Purpose |
 | --- | --- |
-| `400` | Missing/invalid message, image data, agent, thread ID, or approval details. |
-| `401` | Authentication cookie is missing. |
-| `402` | User has insufficient credits. |
-| `404` | Agent or user was not found. |
-| `409` | The approval request was already used. |
-| `503` | The configured Groq model is unavailable. |
-| `500` | Unexpected server/upstream error; an invalid auth token may currently surface as `500`. |
+| `/api/auth` | Sign-in, sign-out, and current user |
+| `/api/chat` | Chat, image analysis/captions, agent chat, and action approvals |
+| `/api/agent` | Create and manage agents |
+| `/api/integration` | Google and Instagram connections |
+| `/api/payment` | Payment order creation and verification |
+
+Most endpoints require the authenticated user's cookie. See the [Backend README](./Backend/README.md) for request examples, credit costs, Firebase deployment credentials, and detailed Google OAuth setup.
+
+## Useful commands
+
+```bash
+# Frontend
+cd Frontend
+npm run lint
+npm run build
+
+# Backend
+cd Backend
+npm run dev
+```
+
+## Security notes
+
+- Keep `.env`, provider secrets, and Firebase service-account JSON out of Git.
+- Use hosting-provider secret settings for deployed credentials.
+- Keep `ENCRYPTION_KEY` stable while encrypted integration tokens exist in MongoDB.
+- Configure production OAuth redirect URIs with the exact deployed backend callback URL.
