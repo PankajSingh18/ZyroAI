@@ -4,30 +4,26 @@ import { readFile } from "node:fs/promises";
 
 const loadServiceAccount = async () => {
   const credentialsJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
   if (credentialsJson) {
+    return JSON.parse(credentialsJson);
+  }
+
+  const paths = [
+    "/etc/secrets/serviceAccountKey.json",
+    new URL("../serviceAccountKey.json", import.meta.url),
+  ];
+
+  for (const path of paths) {
     try {
-      return JSON.parse(credentialsJson);
-    } catch {
-      throw new Error(
-        "FIREBASE_SERVICE_ACCOUNT_JSON must contain valid service-account JSON.",
-      );
+      const content = await readFile(path, "utf8");
+      return JSON.parse(content);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
     }
   }
 
-  try {
-    const localCredentials = await readFile(
-      new URL("../serviceAccountKey.json", import.meta.url),
-      "utf8",
-    );
-    return JSON.parse(localCredentials);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error(
-        "Firebase Admin credentials are missing. Set FIREBASE_SERVICE_ACCOUNT_JSON or add Backend/serviceAccountKey.json for local development.",
-      );
-    }
-    throw error;
-  }
+  throw new Error("Firebase credentials not found.");
 };
 
 const serviceAccount = await loadServiceAccount();
