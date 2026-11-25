@@ -1,12 +1,60 @@
-# ZyroAI Backend: Chat API
+# ZyroAI Backend: API and Integrations
 
-This guide documents the authenticated chat, agent, image, and action-approval endpoints mounted at `/api/chat`.
+This guide covers backend setup for Firebase and Google OAuth, plus the authenticated chat, agent, image, and action-approval endpoints.
 
 ## Firebase Admin credentials
 
 The backend uses Firebase Admin to verify sign-in tokens. For deployment (including Render), add a `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable containing the complete service-account JSON. Keep it in the hosting provider's secret environment settings; do not commit it or paste it into source files.
 
 For local development, the backend also accepts `Backend/serviceAccountKey.json`. This file is ignored by Git and should remain private. If both credential sources are present, `FIREBASE_SERVICE_ACCOUNT_JSON` takes precedence.
+
+## Google OAuth
+
+The Google OAuth client is configured in `config/googleOAuth.js` and is used by the integration routes to connect a user's Google account for Gmail and Google Calendar features.
+
+### Google Cloud setup
+
+1. In Google Cloud Console, select the project and create an OAuth 2.0 Client ID for a **Web application**.
+2. Enable the **Gmail API** and **Google Calendar API** for that project.
+3. Add the backend callback URL to the OAuth client's **Authorized redirect URIs**. It must exactly match `GOOGLE_REDIRECT_URI`:
+   - Local: `http://localhost:8000/api/integration/google/callback`
+   - Production: `https://<your-backend-domain>/api/integration/google/callback`
+4. Configure the OAuth consent screen. During testing, add the Google accounts that need access as test users. Google may require app verification before general use of Gmail scopes.
+
+### Environment variables
+
+Set these in `Backend/.env` for local development and in the hosting provider's secret environment settings for deployment:
+
+| Variable | Purpose |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud. |
+| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret; keep private. |
+| `GOOGLE_REDIRECT_URI` | Exact backend callback URL registered in Google Cloud. |
+| `FRONTEND_URL` | Frontend origin used after a successful callback, for example `http://localhost:5173` locally. |
+| `JWT_SECRET` | Signs and verifies the short-lived OAuth `state` value. |
+| `ENCRYPTION_KEY` | 64 hexadecimal characters used to encrypt Google tokens stored in MongoDB. Keep it stable; changing it makes previously stored tokens undecryptable. |
+
+Never commit `.env`, OAuth client secrets, or token values. `index.js` loads dotenv before the application modules so the OAuth client is initialized with the configured environment values.
+
+### OAuth flow
+
+1. An authenticated frontend requests `GET /api/integration/google` (or `GET /api/integration/google/connect`).
+2. The backend returns an authorization URL with the configured scopes, offline access, and a signed `state` value that expires after 10 minutes.
+3. The user grants consent on Google's page. Google redirects to `GET /api/integration/google/callback` with an authorization code and the state.
+4. The backend validates the state, exchanges the code, identifies the Google account, encrypts and stores the tokens, then redirects to `${FRONTEND_URL}/integration?google=connected`.
+
+The callback route is public because Google redirects the browser to it; the signed, expiring state binds the callback to the initiating user. The connect and disconnect routes require the user's authenticated cookie.
+
+### Requested scopes
+
+| Scope | Access |
+| --- | --- |
+| `openid`, `email`, `profile` | Identify the connected Google account. |
+| `https://www.googleapis.com/auth/calendar.events` | Create and manage calendar events. |
+| `https://www.googleapis.com/auth/gmail.send` | Send email through Gmail. |
+| `https://www.googleapis.com/auth/gmail.readonly` | Search and read Gmail messages. |
+
+The user must grant the required scopes for the corresponding Gmail or Calendar integration to work.
 
 ## Authentication
 

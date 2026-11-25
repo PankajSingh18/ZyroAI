@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js";
@@ -8,8 +8,6 @@ import agentRouter from "./routes/agent.route.js";
 import chatRouter from "./routes/chat.route.js";
 import integrationRouter from "./routes/integration.route.js";
 import paymentRouter from "./routes/payment.route.js";
-
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
